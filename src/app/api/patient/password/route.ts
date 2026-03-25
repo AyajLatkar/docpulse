@@ -1,0 +1,24 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import bcrypt from "bcryptjs";
+
+export async function PUT(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session || (session.user as any).role !== "PATIENT")
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const id = (session.user as any).id;
+  const { currentPassword, newPassword } = await req.json();
+
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
+
+  const valid = await bcrypt.compare(currentPassword, user.password);
+  if (!valid) return NextResponse.json({ error: "Current password is incorrect." }, { status: 400 });
+
+  const hashed = await bcrypt.hash(newPassword, 12);
+  await prisma.user.update({ where: { id }, data: { password: hashed } });
+  return NextResponse.json({ success: true });
+}
